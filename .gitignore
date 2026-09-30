@@ -1,0 +1,5 @@
+node_modules/
+.nuxt/
+.data/
+*.log
+node_modules/.cache/

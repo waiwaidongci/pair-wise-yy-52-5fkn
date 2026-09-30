@@ -6,6 +6,7 @@
     "dev": "nuxt dev --host 0.0.0.0 --port 62052",
     "build": "nuxt build",
     "preview": "nuxt preview",
+    "verify:chain": "esbuild scripts/chain-entry.ts --bundle --platform=node --format=esm --define:import.meta.client=true --outfile=node_modules/.cache/chain-bundle.mjs --log-level=warning && node scripts/verify-chain.mjs",
     "postinstall": "nuxt prepare"
   },
   "dependencies": {
