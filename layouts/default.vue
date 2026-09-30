@@ -4,6 +4,9 @@ import { useOperationsStore } from '~/stores/operations'
 const store = useOperationsStore()
 const route = useRoute()
 const open = ref(false)
+const outboxPending = computed(() => store.outbox.filter((item) => item.status === '待上传').length)
+const unresolvedCount = computed(() => store.pendingItems.filter((item) => !item.resolved).length)
+watch(() => store.connection, (value) => { if (value === '在线') store.flushOutbox() })
 const nav = [
   { to: '/', label: '状态看板', icon: 'i-heroicons-chart-bar-square' },
   { to: '/permits', label: '作业许可', icon: 'i-heroicons-clipboard-document-check' },
@@ -27,7 +30,8 @@ const nav = [
         <div><b>运行中 · A 区集电线路检修</b><span class="muted desktop-only">值班负责人：李骁 · 2026-09-29 16:48</span></div>
         <span class="flex-1" />
         <UBadge :color="store.connection === '在线' ? 'green' : 'amber'" variant="subtle">{{ store.connection }}</UBadge>
-        <UButton v-if="store.pendingRetry" size="sm" color="amber" variant="soft" @click="store.retryPending">重试 {{ store.pendingRetry }} 项</UButton>
+        <UBadge v-if="unresolvedCount" color="red" variant="subtle">待处理 {{ unresolvedCount }}</UBadge>
+        <UButton v-if="outboxPending" size="sm" color="amber" variant="soft" @click="store.flushOutbox()">待传 {{ outboxPending }} 项</UButton>
         <UButton icon="i-heroicons-plus" color="primary" @click="navigateTo('/permits?new=1')">新建许可</UButton>
       </header>
       <main class="main"><slot /></main>

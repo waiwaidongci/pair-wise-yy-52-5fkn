@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useOperationsStore } from '~/stores/operations'
+import { recomputeConflicts } from '~/utils/permits'
 
 const store = useOperationsStore()
 const selectedDevice = ref('WTG-03')
@@ -10,6 +11,21 @@ const devices = [
   { id: 'BOX-12', name: '12 号箱式变压器', state: '运行', load: '2.4 MW', points: 1, crew: '电气一班' },
   { id: 'BUS-A', name: 'A 段 35kV 母线', state: '运行', load: '18.6 MW', points: 1, crew: '公用' },
 ]
+function permitOfPoint(pointId: string) {
+  return store.permits.find((permit) => permit.isolationPoints.some((point) => point.id === pointId))
+}
+function cycleState(permitId: string | undefined, pointId: string, state: string) {
+  if (!permitId) return
+  const order = ['待操作', '已隔离', '已恢复']
+  const next = order[(order.indexOf(state) + 1) % order.length] as '待操作' | '已隔离' | '已恢复'
+  if (state === '已隔离' && !confirm('变更隔离点状态将触发共享边界重算，受影响许可立即退回复核。确认继续？')) return
+  store.changePointState(permitId, pointId, next)
+}
+const deviceConflicts = computed(() =>
+  recomputeConflicts(store.permits).filter((group) =>
+    group.permits.some((permit) => permit.isolationPoints.some((point) => point.device.includes(selectedDevice.value)) || permit.device.includes(selectedDevice.value)),
+  ),
+)
 </script>
 
 <template>
@@ -18,7 +34,7 @@ const devices = [
     <div class="device-grid">
       <article v-for="device in devices" :key="device.id" class="panel device" :class="{ active: selectedDevice === device.id }" @click="selectedDevice = device.id"><div class="inline justify-between"><UBadge variant="subtle">{{ device.id }}</UBadge><UBadge :color="device.state === '运行' ? 'green' : device.state === '检修隔离' ? 'red' : 'amber'" variant="subtle">{{ device.state }}</UBadge></div><h2>{{ device.name }}</h2><div class="kv"><span>当前负荷</span><b>{{ device.load }}</b></div><div class="kv"><span>隔离点</span><b>{{ device.points }} 个</b></div><div class="kv"><span>责任班组</span><b>{{ device.crew }}</b></div></article>
     </div>
-    <section class="grid lower"><article class="panel p-4"><h2>{{ selectedDevice }} · 隔离检查单</h2><div v-for="point in selectedPoints" :key="point.id" class="point"><div class="lock-icon"><UIcon name="i-heroicons-lock-closed" /></div><div><b>{{ point.label }}</b><small>{{ point.type }} · {{ point.id }}</small></div><UBadge :color="point.state === '已隔离' ? 'green' : 'amber'" variant="subtle">{{ point.state }}</UBadge><UButton size="xs" variant="ghost">操作记录</UButton></div><UAlert v-if="!selectedPoints.length" color="gray" title="该设备暂无隔离点" description="可在许可中新建隔离点并关联设备。" /></article><article class="panel p-4"><h2>交叉冲突检测</h2><UAlert color="red" variant="soft" title="LINE-A2 与 BOX-12 共用母线隔离边界" description="两个作业在同一时间窗内涉及 BUS-A，需由值班负责人确认先后顺序与交接条件。" /><h3>锁定器具台账</h3><div class="tool"><span>LK-2107</span><b>WTG-03 · 周野</b></div><div class="tool"><span>LK-2118</span><b>LINE-A2 · 待领用</b></div><div class="tool"><span>GND-042</span><b>17 号杆 · 谭勇</b></div><UButton block color="primary" class="mt-4" icon="i-heroicons-check-badge">完成隔离确认</UButton></article></section>
+    <section class="grid lower"><article class="panel p-4"><h2>{{ selectedDevice }} · 隔离检查单</h2><div v-for="point in selectedPoints" :key="point.id" class="point"><div class="lock-icon"><UIcon name="i-heroicons-lock-closed" /></div><div><b>{{ point.label }}</b><small>{{ point.type }} · {{ point.id }} · {{ permitOfPoint(point.id)?.id }}</small></div><UButton size="xs" :color="point.state === '已隔离' ? 'green' : point.state === '已恢复' ? 'gray' : 'amber'" variant="soft" @click="cycleState(permitOfPoint(point.id)?.id, point.id, point.state)">{{ point.state }}</UButton><UButton size="xs" variant="ghost">操作记录</UButton></div><UAlert v-if="!selectedPoints.length" color="gray" title="该设备暂无隔离点" description="可在许可中新建隔离点并关联设备。" /></article><article class="panel p-4"><h2>交叉冲突检测</h2><UAlert v-for="(group, i) in deviceConflicts" :key="i" class="mb-2" color="red" variant="soft" :title="group.permits.map((p) => p.id).join(' 与 ') + ' 共用母线边界'" :description="group.reasons.join('；') + '。需由值班负责人确认先后顺序与交接条件。'" /><UAlert v-if="!deviceConflicts.length" color="gray" variant="soft" title="当前设备无共享边界冲突" description="重算链路未发现时间窗重叠的共用母线段作业。" /><h3>锁定器具台账</h3><div class="tool"><span>LK-2107</span><b>WTG-03 · 周野</b></div><div class="tool"><span>LK-2118</span><b>LINE-A2 · 待领用</b></div><div class="tool"><span>GND-042</span><b>17 号杆 · 谭勇</b></div><UButton block color="primary" class="mt-4" icon="i-heroicons-check-badge">完成隔离确认</UButton></article></section>
   </div>
 </template>
 
